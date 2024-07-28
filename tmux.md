@@ -239,7 +239,7 @@ Ctrl+b :
 
 ## Help
 
-```
+```bash
 # list key bindings
 tmux list-keys
 :list-keys
