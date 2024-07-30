@@ -74,7 +74,7 @@ Ctrl+b ,
 Ctrl+b &
 
 # list windows
-Ctrl+b p
+Ctrl+b w
 
 # previous window
 Ctrl+b p
@@ -149,7 +149,7 @@ Ctrl+b right
 # toggle between pane layouts
 Ctrl+b Spacebar
 
-# switch to nexe pane
+# switch to next pane
 Ctrl+b o
 
 # show pane numbers
@@ -180,7 +180,7 @@ Ctrl+b Ctrl+right
 Ctrl+b x
 ```
 
-## Copt Mode
+## Copy Mode
 
 ```bash
 # use vi keys in buffer
@@ -219,7 +219,6 @@ Ctrl+b ]
 # delete buffer_1
 :delete-buffer -b 1
 ```
-
 
 ## Misc
 
