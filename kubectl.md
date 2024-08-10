@@ -34,6 +34,8 @@ kubectl cluster-information
 # dump current cluster state to /path/to/cluster-state
 kubectl cluster-info dump --output=directory=/path/to/cluster-state
 
+# add a new user to the kubeconfig with basic auth
+kubectl config set-credentials kubeuser/foo.kubernetes.com --username={{USERNAME}} --password={{PASSWORD}}
 ```
 
 ## Nodes
