@@ -168,6 +168,9 @@ docker image pull example:1.0
 # push image my-image to repository myrepo under a registry
 docker push myrepo/my-image:2.0
 docker image push myrepo/my-image:2.0
+
+# dangling image
+docker image --filter "dangling=true"
 ```
 
 ## Network
@@ -216,4 +219,10 @@ docker run --rm --volume my_volume:/mount_bkp --volume $(pwd):/backup ubuntu tar
 
 # restore my_backup.tar to my_volume
 docker run --rm --volume my_volume:/mount_bkp --volume $(pwd):/backup ubuntu tar xvf /backup/my_backup.tar -C /mount_bkp --strip 1
+
+# dangling volume
+docker volume --filter "dangling=true"
+
+# remove all danling volume(docker volume prune)
+docker volume rm $(docker volume -qf "dangling=true")
 ```
