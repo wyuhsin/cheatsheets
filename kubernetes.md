@@ -545,7 +545,7 @@ kubectl create job hello --image=busybox:1.28 --echo 'Hello World'
 ```
 
 
-## Cronjobs
+## CronJobs
 
 ```bash
 # cronjobs: jb/cronjob/cronjobs
@@ -570,4 +570,142 @@ kubectl describe cronjobs
 
 # create a cronjob which print "Hello World" every minute
 kubectl create cronjob hello --image=busybox:1.28 --schedule ='*/1 * * * *' --echo 'Hello World'
+```
+
+## Install Kubernetes Cluster
+
+```bash
+# set hostname on each machine
+hostnamectl set-hostname k8s-master
+hostnamectl set-hostname k8s-node1
+hostnamectl set-hostname k8s-node2
+
+# edit /etc/hosts on each machine
+cat >> /etc/hosts << EOF
+
+192.168.11.118 k8s-master
+192.168.11.119 k8s-node1
+192.168.11.120 k8s-node2
+EOF
+
+# disable firewalld on each machine
+systemctl disable --now firewalld
+# disable selinux
+setenforce 0
+sed -ri 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+
+# install and set ntpdate on each machine
+yum -y install ntpdate
+crontab -e
+
+0 */1 * * * /usr/sbin/ntpdate time1.aliyun.com
+
+# update kernel on each machine
+rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+yum -y install https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm
+yum --enablerepo="elrepo-kernel" -y install kernel-ml.x86_64
+grub2-set-default 0
+grub2-mkconfig -o /boot/grub2/grub.cfg
+
+# reboot and verify on each machine
+reboot
+uname -r
+
+# set network on each machine
+cat > /etc/sysctl.d/k8s.conf << EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+vm.swappiness = 0
+EOF
+
+modprobe br_netfilter
+lsmod | grep br_netfilter
+sysctl -p /etc/sysctl.d/k8s.conf
+
+yum -y install ipset ipvsadm
+
+cat > /etc/sysconfig/modules/ipvs.modules <<EOF
+#!/bin/bash
+modprobe -- ip_vs
+modprobe -- ip_vs_rr
+modprobe -- ip_vs_wrr
+modprobe -- ip_vs_sh
+modprobe -- nf_conntrack
+EOF
+
+chmod 755 /etc/sysconfig/modules/ipvs.modules && bash /etc/sysconfig/modules/ipvs.modules && lsmod | grep -e ip_vs -e nf_conntrack
+
+# turn off swap on each machine
+swapoff -a
+sed -i 's/.*swap.*/#&/g' /etc/fstab
+cat /etc/fstab
+
+# install docker on each machine
+yum -y install wget
+wget https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo -O /etc/yum.repos.d/docker-ce.repo
+yum -y install docker-ce
+
+cat > /etc/docker/daemon.json << EOF
+{
+  "registry-mirrors": ["https://84bkfzte.mirror.aliyuncs.com"],
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+
+systemctl daemon-reload
+systemctl enable --now docker
+
+# install cri-dockerd on each machine
+wget https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.1/cri-dockerd-0.3.1-3.el7.x86_64.rpm
+rpm -ivh cri-dockerd-0.3.1-3.el7.x86_64.rpm
+
+vi /usr/lib/systemd/system/cri-docker.service
+
+ExecStart=/usr/bin/cri-dockerd --container-runtime-endpoint fd:// --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.7
+
+systemctl daemon-reload
+systemctl enable cri-docker && systemctl start cri-docker
+
+# install k8s on each machine
+cat > /etc/yum.repos.d/kubernetes.repo << EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+EOF
+
+yum install -y kubelet-1.27.0 kubeadm-1.27.0 kubectl-1.27.0
+
+vi /etc/sysconfig/kubelet
+
+KUBELET_EXTRA_ARGS="--cgroup-driver=systemd"
+
+systemctl enable kubelet && systemctl restart kubelet
+
+# init k8s cluster on master node
+kubeadm init \
+  --apiserver-advertise-address=192.168.11.118 \
+  --image-repository registry.aliyuncs.com/google_containers \
+  --kubernetes-version v1.27.0 \
+  --service-cidr=10.96.0.0/12 \
+  --pod-network-cidr=10.244.0.0/16 \
+  --cri-socket=unix:///var/run/cri-dockerd.sock \
+  --ignore-preflight-errors=all
+
+# only run on master node
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+chown $(id -u):$(id -g) $HOME/.kube/config
+
+# only run on work node
+kubeadm join 192.168.11.118:6443 --token 9te570.6dpmex485kekd4lz \
+--discovery-token-ca-cert-hash sha256:0fbdeebee023c2d81685d25a141ee35062ea5e892cc18b23d211960b68c4df74 --cri-socket=unix:///var/run/cri-dockerd.sock
+
+# install cacico on master node
+wget https://projectcalico.docs.tigera.io/archive/v3.25/manifests/calico.yaml
+kubectl apply -f calico.yaml
 ```
